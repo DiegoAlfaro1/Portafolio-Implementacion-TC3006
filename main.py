@@ -21,6 +21,8 @@ print(f"\nDATOS CARGADOS:")
 print(f"   • Total de transacciones: {len(df):,}")
 print(f"   • Columnas originales: {len(df.columns)}")
 
+
+
 # PARTE 1: TRANSFORMACION DE DATOS
 print(f"\n FASE 1: PREPARACION DE DATOS")
 
@@ -248,7 +250,7 @@ plt.subplots_adjust(top=0.9)  # push down the plots a bit
 
 # Distribución de probabilidades predichas
 axes[0,0].hist(resultados['test_proba'], bins=30, alpha=0.7, color='skyblue', edgecolor='black')
-axes[0,0].axvline(x=0.5, color='red', linestyle='--', linewidth=2, label='Umbral de decisión')
+axes[0,0].axvline(x=0.41, color='red', linestyle='--', linewidth=2, label='Umbral de decisión')
 axes[0,0].set_title('Distribución de Probabilidades Predichas')
 axes[0,0].set_xlabel('Probabilidad Predicha')
 axes[0,0].set_ylabel('Frecuencia')
@@ -365,7 +367,7 @@ print("Predicha | Real | Probabilidad | Estado")
 print("-" * 40)
 correctas = 0
 for i in range(15):
-    pred = 1 if resultados['test_proba'][i] >= 0.5 else 0
+    pred = 1 if resultados['test_proba'][i] >= 0.41 else 0
     real = y_test[i]
     prob = resultados['test_proba'][i]
     estado = "Correcta" if pred == real else "Incorrecta"
