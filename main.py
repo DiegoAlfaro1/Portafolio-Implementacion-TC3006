@@ -1,387 +1,325 @@
 import pandas as pd
 import numpy as np
-import seaborn as sns
 import matplotlib.pyplot as plt
 
-# Configuración de visualizaciones
-sns.set_palette("husl")
-plt.rcParams['figure.figsize'] = (12, 8)
-plt.rcParams['font.size'] = 10
+# Set random seed for reproducible results
+np.random.seed(42)
 
-print("="*60)
-print("    REGRESION LOGISTICA DESDE CERO")
-print("    Prediccion de Ventas Premium de Cafe")
-print("="*60)
+# ========================================================================================
+# DATA LOADING AND PREPROCESSING
+# ========================================================================================
 
-# Lectura de dataset
+# Load the coffee sales dataset
 dataset = "Coffe_sales.csv"
 df = pd.read_csv(dataset)
 
-print(f"\nDATOS CARGADOS:")
-print(f"   • Total de transacciones: {len(df):,}")
-print(f"   • Columnas originales: {len(df.columns)}")
+# Data cleaning and feature engineering:
+# 1. Remove redundant columns (Month_name, Time, Weekday, cash_type, coffee_name)
+# 2. Rename columns for clarity
+# 3. Keep only relevant features for time-based price prediction
 
+# Remove unnecessary columns
+df = df.drop(columns=['Month_name', 'Time', 'Weekday', 'cash_type', 'coffee_name'])
 
-
-# PARTE 1: TRANSFORMACION DE DATOS
-print(f"\n FASE 1: PREPARACION DE DATOS")
-
-# Eliminacion de columnas redundantes
-df = df.drop(columns=['Month_name','Time','Weekday'])
-
-# Cambiar nombres de columnas
+# Rename columns for better readability
 df.rename(columns={
-    'cash_type':'Payment_type', 
-    'money':'Price', 
-    'coffee_name':'Coffe_name', 
+    'money': 'Price', 
     'Time_of_Day': 'Time_of_day', 
     'hour_of_day': 'Hour_of_day'
 }, inplace=True)
 
-# Crear variable objetivo: Venta Premium (>$33)
-df['Premium_sale'] = (df["Price"] > 33).astype(int)
+# ========================================================================================
+# TRAIN-TEST SPLIT
+# ========================================================================================
 
-premium_count = df['Premium_sale'].sum()
-premium_pct = (premium_count / len(df)) * 100
-
-print(f"   • Variable objetivo creada: Premium_sale")
-print(f"   • Ventas premium (>$33): {premium_count:,} ({premium_pct:.1f}%)")
-print(f"   • Ventas estándar (≤$33): {len(df)-premium_count:,} ({100-premium_pct:.1f}%)")
-
-# VISUALIZACION 1: Análisis exploratorio de datos
-print(f"\n GENERANDO VISUALIZACIONES EXPLORATORIAS...")
-
-fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-fig.suptitle('Análisis Exploratorio de Ventas de Café', fontsize=16, fontweight='bold')
-plt.subplots_adjust(top=0.9)  # push down the plots a bit
-
-
-# Distribución de ventas premium vs estándar
-sns.countplot(data=df, x='Premium_sale', ax=axes[0,0])
-axes[0,0].set_title('Distribución de Ventas Premium vs Estándar')
-axes[0,0].set_xlabel('Tipo de Venta (0=Estándar, 1=Premium)')
-axes[0,0].set_ylabel('Cantidad de Transacciones')
-
-# Ventas premium por hora del día
-hourly_premium = df.groupby('Hour_of_day')['Premium_sale'].agg(['count', 'sum', 'mean']).reset_index()
-sns.lineplot(data=hourly_premium, x='Hour_of_day', y='mean', marker='o', ax=axes[0,1])
-axes[0,1].set_title('Tasa de Ventas Premium por Hora del Día')
-axes[0,1].set_xlabel('Hora del Día')
-axes[0,1].set_ylabel('Proporción de Ventas Premium')
-axes[0,1].set_ylim(0, 1)
-
-# Ventas premium por día de semana
-weekday_premium = df.groupby('Weekdaysort')['Premium_sale'].agg(['count', 'sum', 'mean']).reset_index()
-sns.barplot(data=weekday_premium, x='Weekdaysort', y='mean', ax=axes[1,0])
-axes[1,0].set_title('Tasa de Ventas Premium por Día de Semana')
-axes[1,0].set_xlabel('Día de Semana (1=Lun, 7=Dom)')
-axes[1,0].set_ylabel('Proporción de Ventas Premium')
-
-# Ventas premium por mes
-monthly_premium = df.groupby('Monthsort')['Premium_sale'].agg(['count', 'sum', 'mean']).reset_index()
-sns.barplot(data=monthly_premium, x='Monthsort', y='mean', ax=axes[1,1])
-axes[1,1].set_title('Tasa de Ventas Premium por Mes')
-axes[1,1].set_xlabel('Mes (1=Ene, 12=Dec)')
-axes[1,1].set_ylabel('Proporción de Ventas Premium')
-
-plt.tight_layout(pad=4,rect=[0, 0, 1, 0.96])
-plt.show()
-
-# Division train/test
+# Split dataset into training (70%) and testing (30%) sets
 df_train = df.sample(frac=0.7, random_state=42)
 df_test = df.drop(df_train.index)
 
-print(f"   • Conjunto entrenamiento: {len(df_train):,} muestras")
-print(f"   • Conjunto prueba: {len(df_test):,} muestras")
-
-# Matriz de características
+# Extract features: Hour of day, Day of week, Month
+# These temporal features will be used to predict coffee prices
 x_train = df_train[['Hour_of_day', "Weekdaysort", "Monthsort"]].values.astype(float)
 x_test = df_test[['Hour_of_day', "Weekdaysort", "Monthsort"]].values.astype(float)
 
-# Vector objetivo
-y_train = df_train['Premium_sale'].values
-y_test = df_test['Premium_sale'].values
+# Extract target variable: Coffee price
+y_train = df_train['Price'].values.astype(float)
+y_test = df_test['Price'].values.astype(float)
 
-# Normalizacion Min-Max
-X_min = x_train.min(axis=0)
-X_max = x_train.max(axis=0)
+# ========================================================================================
+# FEATURE STANDARDIZATION
+# ========================================================================================
 
-x_train_scaled = (x_train - X_min) / (X_max - X_min)
-x_test_scaled = (x_test - X_min) / (X_max - X_min)
+# Standardize features to have mean=0 and std=1
+# This helps gradient descent converge faster and more reliably
+X_mean = x_train.mean(axis=0)  # Calculate mean from training data only
+X_std = x_train.std(axis=0)    # Calculate std from training data only
 
-print(f"   • Características normalizadas (0-1)")
-print(f"   • Rangos originales - Hora: {X_min[0]:.0f}-{X_max[0]:.0f}, Día: {X_min[1]:.0f}-{X_max[1]:.0f}, Mes: {X_min[2]:.0f}-{X_max[2]:.0f}")
+# Apply standardization using training statistics to both sets
+x_train_scaled = (x_train - X_mean) / X_std
+x_test_scaled = (x_test - X_mean) / X_std   # Use training stats to avoid data leakage
 
-# Agregar columna de sesgo (bias)
+# Add bias column (column of 1s) for the intercept term in linear regression
 x_train_with_bias = np.column_stack([np.ones(x_train_scaled.shape[0]), x_train_scaled])
 x_test_with_bias = np.column_stack([np.ones(x_test_scaled.shape[0]), x_test_scaled])
 
-print(f"   • Columna de sesgo agregada - Forma final: {x_train_with_bias.shape}")
+# ========================================================================================
+# MODEL IMPLEMENTATION - MULTIPLE LINEAR REGRESSION FROM SCRATCH
+# ========================================================================================
 
-# PARTE 2: IMPLEMENTACION DE ALGORITMOS
-print(f"\n FASE 2: ALGORITMOS DE APRENDIZAJE")
+# Initialize weights (theta) with small random values
+# Shape: [bias_weight, hour_weight, weekday_weight, month_weight]
+weight = np.random.normal(0, 0.01, 4)
 
-def sigmoide(z):
-    """Funcion sigmoide: convierte valores reales a probabilidades (0-1)"""
-    z = np.clip(z, -500, 500)
-    return 1 / (1 + np.exp(-z))
-
-def probabilidad(X, w):
-    """Predice probabilidades usando regresion logistica"""
-    z = X @ w
-    return sigmoide(z)
-
-def cost(y_true, y_pred):
-    """Calcula el costo usando perdida logaritmica (log loss)"""
-    epsilon = 1e-15
-    y_pred_clip = np.clip(y_pred, epsilon, 1-epsilon)
-    return -np.mean(y_true * np.log(y_pred_clip) + (1-y_true) * np.log(1-y_pred_clip))
-
-def gradiente(X, y_true, y_pred):
-    """Calcula gradientes para actualizacion de pesos"""
-    m = X.shape[0]
-    error = y_pred - y_true
-    return (1/m) * X.T @ error
-
-def gradient_descent(w, gradientes, learning_rate):
-    """Actualiza pesos usando descenso por gradiente"""
-    return w - learning_rate * gradientes
-
-print(f"   • Funciones implementadas: Sigmoide, Prediccion, Costo, Gradientes")
-
-# PARTE 3: ENTRENAMIENTO DEL MODELO
-print(f"\n FASE 3: ENTRENAMIENTO DEL MODELO")
-
-def entrenar_con_convergencia(X, y, learning_rate=0.005, max_epochs=2000, umbral=1e-6):
-    """Entrena el modelo hasta convergencia"""
-    pesos = np.random.normal(0, 0.01, 4)
-    historial_costos = []
+def predict(X, weight):
+    """
+    Make predictions using linear regression
+    Formula: y = X @ theta (matrix multiplication)
     
-    for epoch in range(max_epochs):
-        predicciones = probabilidad(X, pesos)
-        costo = cost(y, predicciones)
-        historial_costos.append(costo)
-        
-        gradientes = gradiente(X, y, predicciones)
-        pesos = gradient_descent(pesos, gradientes, learning_rate)
-        
-        if epoch > 10:
-            cambio_costo = historial_costos[-2] - historial_costos[-1]
-            if cambio_costo < umbral:
-                break
-                
-    return pesos, historial_costos, epoch
+    Args:
+        X: Feature matrix with bias column (n_samples, 4)
+        weight: Weight vector (4,)
+    
+    Returns:
+        predictions: Predicted values (n_samples,)
+    """
+    return X @ weight
 
-# Entrenar el modelo
-print(f"   • Iniciando entrenamiento...")
-final_weights, cost_history, final_epoch = entrenar_con_convergencia(
-    X=x_train_with_bias,
-    y=y_train,
-    learning_rate=0.005,
-    max_epochs=6000,
-    umbral=1e-6
-)
+def cost(X, y, weight):
+    """
+    Calculate Mean Squared Error cost function
+    Formula: J = (1/2m) * sum((predicted - actual)^2)
+    
+    Args:
+        X: Feature matrix (n_samples, 4)
+        y: True values (n_samples,)
+        weight: Weight vector (4,)
+    
+    Returns:
+        cost: Single cost value (lower is better)
+    """
+    predictions = predict(X, weight)
+    difference = (predictions - y) ** 2
+    return (1/2) * np.mean(difference)
 
-mejora_costo = cost_history[0] - cost_history[-1]
-print(f"   • Entrenamiento completado en {final_epoch} epocas")
-print(f"   • Costo inicial: {cost_history[0]:.6f}")
-print(f"   • Costo final: {cost_history[-1]:.6f}")
-print(f"   • Mejora total: {mejora_costo:.6f}")
+def gradient(X, y, weight):
+    """
+    Calculate gradients for weight updates
+    Formula: grad = (1/m) * X.T @ (predicted - actual)
+    
+    Args:
+        X: Feature matrix (n_samples, 4)
+        y: True values (n_samples,)
+        weight: Current weights (4,)
+    
+    Returns:
+        gradients: Gradient vector (4,) - tells us how to update each weight
+    """
+    predictions = predict(X, weight)
+    error = predictions - y
+    return (1/len(y)) * X.T @ error
 
-# VISUALIZACION 2: Curva de aprendizaje
-print(f"\n GENERANDO VISUALIZACION DE ENTRENAMIENTO...")
+# ========================================================================================
+# GRADIENT DESCENT TRAINING
+# ========================================================================================
 
-plt.figure(figsize=(12, 5))
+# Training hyperparameters
+learning_rate = 0.01    # Step size for weight updates
+max_epochs = 1000       # Maximum number of training iterations
+tolerance = 1e-6        # Stop if cost improvement is smaller than this
 
-plt.subplot(1, 2, 1)
-plt.plot(cost_history, linewidth=2, color='darkblue')
-plt.title('Curva de Aprendizaje - Evolución del Costo', fontweight='bold')
-plt.xlabel('Epoca')
-plt.ylabel('Costo (Log Loss)')
+# Initialize training tracking
+cost_history = []       # Track cost over time to monitor convergence
+theta = weight.copy()   # Current weights (will be updated during training)
+
+print("=== Training Multiple Linear Regression ===")
+
+# Training loop - Gradient Descent Algorithm
+for epoch in range(max_epochs):
+    # Calculate current cost
+    current_cost = cost(x_train_with_bias, y_train, theta)
+    cost_history.append(current_cost)
+    
+    # Calculate gradients (how much to change each weight)
+    grads = gradient(x_train_with_bias, y_train, theta)
+    
+    # Update weights using gradient descent rule: theta = theta - alpha * gradient
+    theta = theta - learning_rate * grads
+    
+    # Print progress every 100 epochs
+    if epoch % 100 == 0:
+        print(f"Epoch {epoch}: Cost = {current_cost:.4f}")
+    
+    # Early stopping: if cost stops improving significantly, stop training
+    if len(cost_history) > 1:
+        if abs(cost_history[-2] - cost_history[-1]) < tolerance:
+            print(f"Converged at epoch {epoch}")
+            break
+
+print(f"Final training cost: {cost_history[-1]:.4f}")
+print(f"Learned weights: {theta}")
+print(f"Model equation: Price = {theta[0]:.2f} + {theta[1]:.2f}*hour + {theta[2]:.2f}*weekday + {theta[3]:.2f}*month")
+
+# ========================================================================================
+# MODEL EVALUATION
+# ========================================================================================
+
+# Make predictions on test set
+test_predictions = predict(x_test_with_bias, theta)
+test_cost = cost(x_test_with_bias, y_test, theta)
+
+print(f"\nTest set cost: {test_cost:.4f}")
+
+def accuracy_by_price_range(predictions, actual):
+    """Analyze model accuracy across different price ranges"""
+    low_range = actual <= 25     # Budget coffees
+    mid_range = (actual > 25) & (actual <= 35)  # Standard coffees  
+    high_range = actual > 35     # Premium coffees
+    
+    print("=== Accuracy by Price Range ===")
+    for range_name, mask in [("Low ($18-25)", low_range), 
+                            ("Mid ($25-35)", mid_range), 
+                            ("High ($35+)", high_range)]:
+        if np.sum(mask) > 0:
+            range_mae = np.mean(np.abs(predictions[mask] - actual[mask]))
+            range_rmse = np.sqrt(np.mean((predictions[mask] - actual[mask])**2))
+            count = np.sum(mask)
+            print(f"{range_name}: {count} samples, MAE: ${range_mae:.2f}, RMSE: ${range_rmse:.2f}")
+
+def accuracy_within_threshold(predictions, actual, thresholds=[1, 2, 3, 5]):
+    """Calculate percentage of predictions within acceptable error ranges"""
+    print("\n=== Predictions Within Error Thresholds ===")
+    errors = np.abs(predictions - actual)
+    
+    for threshold in thresholds:
+        within_threshold = np.sum(errors <= threshold)
+        percentage = (within_threshold / len(errors)) * 100
+        print(f"Within ${threshold}: {within_threshold}/{len(errors)} ({percentage:.1f}%)")
+
+def compare_to_baselines(predictions, actual):
+    """Compare model performance to simple baseline models"""
+    print("\n=== Comparison to Baseline Models ===")
+    
+    # Baseline 1: Always predict the mean price
+    mean_baseline = np.full(len(actual), np.mean(actual))
+    mean_mae = np.mean(np.abs(mean_baseline - actual))
+    mean_rmse = np.sqrt(np.mean((mean_baseline - actual)**2))
+    
+    # Baseline 2: Always predict the median price
+    median_baseline = np.full(len(actual), np.median(actual))
+    median_mae = np.mean(np.abs(median_baseline - actual))
+    median_rmse = np.sqrt(np.mean((median_baseline - actual)**2))
+    
+    # Our trained model
+    model_mae = np.mean(np.abs(predictions - actual))
+    model_rmse = np.sqrt(np.mean((predictions - actual)**2))
+    
+    print(f"Your Model    - MAE: ${model_mae:.2f}, RMSE: ${model_rmse:.2f}")
+    print(f"Mean Baseline - MAE: ${mean_mae:.2f}, RMSE: ${mean_rmse:.2f}")
+    print(f"Median Baseline - MAE: ${median_mae:.2f}, RMSE: ${median_rmse:.2f}")
+    
+    # Calculate improvement percentages
+    improvement_vs_mean = ((mean_mae - model_mae) / mean_mae) * 100
+    improvement_vs_median = ((median_mae - model_mae) / median_mae) * 100
+    
+    print(f"\nImprovement over mean baseline: {improvement_vs_mean:.1f}%")
+    print(f"Improvement over median baseline: {improvement_vs_median:.1f}%")
+
+# Run all evaluation metrics
+accuracy_by_price_range(test_predictions, y_test)
+accuracy_within_threshold(test_predictions, y_test)
+compare_to_baselines(test_predictions, y_test)
+
+# ========================================================================================
+# VISUALIZATION
+# ========================================================================================
+
+# Create comprehensive visualization of model performance
+plt.figure(figsize=(15, 10))
+
+# Plot 1: Predicted vs Actual prices
+plt.subplot(2, 3, 1)
+plt.scatter(y_test, test_predictions, alpha=0.6, color='blue')
+plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2, label='Perfect Prediction')
+plt.xlabel('Actual Price ($)')
+plt.ylabel('Predicted Price ($)')
+plt.title('Predicted vs Actual Prices')
+plt.legend()
 plt.grid(True, alpha=0.3)
 
-# Zoom a las últimas épocas
-plt.subplot(1, 2, 2)
-start_epoch = max(0, final_epoch - 500)
-plt.plot(range(start_epoch, len(cost_history)), cost_history[start_epoch:], 
-         linewidth=2, color='darkred')
-plt.title(f'Convergencia - Últimas {min(500, final_epoch)} Épocas', fontweight='bold')
-plt.xlabel('Epoca')
-plt.ylabel('Costo (Log Loss)')
+# Plot 2: Residuals (prediction errors)
+plt.subplot(2, 3, 2)
+residuals = test_predictions - y_test
+plt.scatter(test_predictions, residuals, alpha=0.6, color='red')
+plt.axhline(y=0, color='black', linestyle='--', alpha=0.8)
+plt.xlabel('Predicted Price ($)')
+plt.ylabel('Residual (Predicted - Actual)')
+plt.title('Residual Plot')
 plt.grid(True, alpha=0.3)
 
-plt.tight_layout(pad=4,rect=[0, 0, 1, 0.96])
+# Plot 3: Distribution of prediction errors
+plt.subplot(2, 3, 3)
+plt.hist(np.abs(residuals), bins=25, alpha=0.7, color='green', edgecolor='black')
+plt.xlabel('Absolute Error ($)')
+plt.ylabel('Frequency')
+plt.title('Distribution of Prediction Errors')
+plt.grid(True, alpha=0.3)
+
+# Plot 4: Training progress (cost vs iterations)
+plt.subplot(2, 3, 4)
+plt.plot(cost_history, color='purple', linewidth=2)
+plt.xlabel('Iteration')
+plt.ylabel('Cost (MSE)')
+plt.title('Training Progress')
+plt.grid(True, alpha=0.3)
+
+# Plot 5: Feature importance (weight magnitudes)
+plt.subplot(2, 3, 5)
+feature_names = ['Bias', 'Hour', 'Weekday', 'Month']
+colors = ['red' if w < 0 else 'blue' for w in theta]
+plt.bar(feature_names, np.abs(theta), color=colors, alpha=0.7)
+plt.xlabel('Features')
+plt.ylabel('Weight Magnitude')
+plt.title('Feature Importance (Weight Magnitudes)')
+plt.xticks(rotation=45)
+plt.grid(True, alpha=0.3)
+
+# Plot 6: Actual vs predicted price distributions
+plt.subplot(2, 3, 6)
+plt.hist(y_test, bins=25, alpha=0.5, label='Actual Prices', color='blue', density=True)
+plt.hist(test_predictions, bins=25, alpha=0.5, label='Predicted Prices', color='red', density=True)
+plt.xlabel('Price ($)')
+plt.ylabel('Density')
+plt.title('Price Distribution Comparison')
+plt.legend()
+plt.grid(True, alpha=0.3)
+
+plt.tight_layout()
 plt.show()
 
-# PARTE 4: EVALUACION DEL MODELO
-print(f"\n FASE 4: EVALUACION DEL MODELO")
+# ========================================================================================
+# SUMMARY STATISTICS
+# ========================================================================================
 
-def evaluar_modelo(pesos, x_train, y_train, x_test, y_test):
-    """Evalua el rendimiento del modelo entrenado"""
-    train_prob = probabilidad(x_train, pesos)
-    train_pred = (train_prob >= 0.5).astype(int)
-    
-    test_prob = probabilidad(x_test, pesos)
-    test_pred = (test_prob >= 0.41).astype(int)
-    
-    return {
-        'train_accuracy': np.mean(train_pred == y_train),
-        'test_accuracy': np.mean(test_pred == y_test),
-        'train_cost': cost(y_train, train_prob),
-        'test_cost': cost(y_test, test_prob),
-        'test_proba': test_prob,
-        'test_pred': test_pred
-    }
+print("\n" + "="*70)
+print("FINAL MODEL SUMMARY")
+print("="*70)
+print(f"Training samples: {len(x_train)} | Test samples: {len(x_test)}")
+print(f"Features used: Hour of day, Day of week, Month")
+print(f"Target variable: Coffee price (${y_test.min():.2f} - ${y_test.max():.2f})")
+print(f"Final training cost: {cost_history[-1]:.4f}")
+print(f"Test set cost: {test_cost:.4f}")
+print(f"Model converged in {len(cost_history)} iterations")
 
-resultados = evaluar_modelo(final_weights, x_train_with_bias, y_train, x_test_with_bias, y_test)
+# Calculate R-squared score
+y_mean = np.mean(y_test)
+ss_total = np.sum((y_test - y_mean) ** 2)
+ss_residual = np.sum((test_predictions - y_test) ** 2)
+r2_score = 1 - (ss_residual / ss_total)
+print(f"R-squared score: {r2_score:.4f} ({r2_score*100:.1f}% of variance explained)")
 
-print(f"\n RENDIMIENTO DEL MODELO:")
-print(f"   • Precision entrenamiento: {resultados['train_accuracy']:.1%}")
-print(f"   • Precision prueba: {resultados['test_accuracy']:.1%}")
-print(f"   • Mejora vs. azar: +{resultados['test_accuracy']-0.5:.1%}")
-
-# VISUALIZACION 3: Análisis de resultados del modelo
-print(f"\n GENERANDO VISUALIZACIONES DE RESULTADOS...")
-
-fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-fig.suptitle('Análisis de Resultados del Modelo', fontsize=16, fontweight='bold')
-plt.subplots_adjust(top=0.9)  # push down the plots a bit
-
-
-# Distribución de probabilidades predichas
-axes[0,0].hist(resultados['test_proba'], bins=30, alpha=0.7, color='skyblue', edgecolor='black')
-axes[0,0].axvline(x=0.41, color='red', linestyle='--', linewidth=2, label='Umbral de decisión')
-axes[0,0].set_title('Distribución de Probabilidades Predichas')
-axes[0,0].set_xlabel('Probabilidad Predicha')
-axes[0,0].set_ylabel('Frecuencia')
-axes[0,0].legend()
-
-# Matriz de confusión
-from sklearn.metrics import confusion_matrix
-cm = confusion_matrix(y_test, resultados['test_pred'])
-sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=axes[0,1])
-axes[0,1].set_title('Matriz de Confusión')
-axes[0,1].set_xlabel('Predicción')
-axes[0,1].set_ylabel('Valor Real')
-
-# Comparación de probabilidades por clase real
-df_resultados = pd.DataFrame({
-    'Probabilidad': resultados['test_proba'],
-    'Clase_Real': ['Estándar' if y == 0 else 'Premium' for y in y_test]
-})
-sns.boxplot(data=df_resultados, x='Clase_Real', y='Probabilidad', ax=axes[1,0])
-axes[1,0].set_title('Distribución de Probabilidades por Clase Real')
-axes[1,0].set_ylabel('Probabilidad Predicha')
-
-# Importancia de características (pesos del modelo)
-caracteristicas = ['Sesgo', 'Hora del día', 'Día de semana', 'Mes']
-pesos_df = pd.DataFrame({
-    'Caracteristica': caracteristicas,
-    'Peso': final_weights,
-    'Peso_Abs': np.abs(final_weights)
-})
-sns.barplot(data=pesos_df, x='Peso', y='Caracteristica', palette='viridis', ax=axes[1,1])
-axes[1,1].set_title('Importancia de Características (Pesos del Modelo)')
-axes[1,1].set_xlabel('Peso')
-axes[1,1].axvline(x=0, color='black', linestyle='-', alpha=0.3)
-
-plt.tight_layout(pad=4,rect=[0, 0, 1, 0.96])
-plt.show()
-
-# VISUALIZACION 4: Análisis de patrones temporales con predicciones
-print(f"\n GENERANDO ANALISIS DE PATRONES TEMPORALES...")
-
-# Crear DataFrame para análisis temporal
-df_test_analysis = df_test.copy()
-df_test_analysis['Probabilidad_Predicha'] = resultados['test_proba']
-df_test_analysis['Prediccion_Correcta'] = (resultados['test_pred'] == y_test)
-
-fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-fig.suptitle('Rendimiento del Modelo por Patrones Temporales', fontsize=16, fontweight='bold')
-plt.subplots_adjust(top=0.9)  # push down the plots a bit
-
-
-# Precisión por hora
-hourly_performance = df_test_analysis.groupby('Hour_of_day').agg({
-    'Prediccion_Correcta': 'mean',
-    'Premium_sale': 'mean',
-    'Probabilidad_Predicha': 'mean'
-}).reset_index()
-
-sns.lineplot(data=hourly_performance, x='Hour_of_day', y='Prediccion_Correcta', 
-             marker='o', label='Precisión del Modelo', ax=axes[0])
-sns.lineplot(data=hourly_performance, x='Hour_of_day', y='Premium_sale', 
-             marker='s', label='Tasa Real Premium', ax=axes[0])
-axes[0].set_title('Rendimiento por Hora del Día')
-axes[0].set_xlabel('Hora del Día')
-axes[0].set_ylabel('Proporción')
-axes[0].legend()
-axes[0].grid(True, alpha=0.3)
-
-# Precisión por día de semana
-weekly_performance = df_test_analysis.groupby('Weekdaysort').agg({
-    'Prediccion_Correcta': 'mean',
-    'Premium_sale': 'mean'
-}).reset_index()
-
-x_pos = np.arange(len(weekly_performance))
-width = 0.35
-axes[1].bar(x_pos - width/2, weekly_performance['Prediccion_Correcta'], 
-           width, label='Precisión del Modelo', alpha=0.8)
-axes[1].bar(x_pos + width/2, weekly_performance['Premium_sale'], 
-           width, label='Tasa Real Premium', alpha=0.8)
-axes[1].set_title('Rendimiento por Día de Semana')
-axes[1].set_xlabel('Día de Semana (1=Lun, 7=Dom)')
-axes[1].set_ylabel('Proporción')
-axes[1].set_xticks(x_pos)
-axes[1].set_xticklabels(weekly_performance['Weekdaysort'])
-axes[1].legend()
-axes[1].grid(True, alpha=0.3)
-
-# Precisión por mes
-monthly_performance = df_test_analysis.groupby('Monthsort').agg({
-    'Prediccion_Correcta': 'mean',
-    'Premium_sale': 'mean'
-}).reset_index()
-
-sns.lineplot(data=monthly_performance, x='Monthsort', y='Prediccion_Correcta', 
-             marker='o', label='Precisión del Modelo', ax=axes[2])
-sns.lineplot(data=monthly_performance, x='Monthsort', y='Premium_sale', 
-             marker='s', label='Tasa Real Premium', ax=axes[2])
-axes[2].set_title('Rendimiento por Mes')
-axes[2].set_xlabel('Mes (1=Ene, 12=Dic)')
-axes[2].set_ylabel('Proporción')
-axes[2].legend()
-axes[2].grid(True, alpha=0.3)
-
-plt.tight_layout(pad=4,rect=[0, 0, 1, 0.96])
-plt.show()
-
-print(f"\n PESOS APRENDIDOS (INTERPRETACION):")
-for i, (peso, caracteristica) in enumerate(zip(final_weights, caracteristicas)):
-    direccion = "favorece" if peso > 0 else "reduce"
-    print(f"   • {caracteristica}: {peso:+.3f} ({direccion} ventas premium)")
-
-print(f"\n EJEMPLOS DE PREDICCION:")
-print("Predicha | Real | Probabilidad | Estado")
-print("-" * 40)
-correctas = 0
-for i in range(15):
-    pred = 1 if resultados['test_proba'][i] >= 0.41 else 0
-    real = y_test[i]
-    prob = resultados['test_proba'][i]
-    estado = "Correcta" if pred == real else "Incorrecta"
-    if pred == real:
-        correctas += 1
-    print(f"   {pred}      |  {real}   |   {prob:.3f}    | {estado}")
-
-print(f"\n RESUMEN FINAL:")
-print(f"   • Modelo: Regresion Logistica (implementacion desde cero)")
-print(f"   • Objetivo: Predecir ventas premium de cafe (>$33)")
-print(f"   • Caracteristicas: Hora, dia de semana, mes")
-print(f"   • Precision final: {resultados['test_accuracy']:.1%}")
-print(f"   • Ejemplos correctos: {correctas}/15 ({correctas/15:.1%})")
-
-print(f"\n" + "="*60)
-print(f"    ENTRENAMIENTO COMPLETADO EXITOSAMENTE")
-print(f"="*60)
+print("\nModel Interpretation:")
+print(f"- Base price: ${theta[0]:.2f}")
+print(f"- Hour effect: ${theta[1]:.2f} per hour")
+print(f"- Weekday effect: ${theta[2]:.2f} per day")
+print(f"- Month effect: ${theta[3]:.2f} per month")
+print("="*70)
