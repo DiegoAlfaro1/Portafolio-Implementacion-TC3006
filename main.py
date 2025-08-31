@@ -2,324 +2,348 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Set random seed for reproducible results
 np.random.seed(42)
 
-# ========================================================================================
-# DATA LOADING AND PREPROCESSING
-# ========================================================================================
-
-# Load the coffee sales dataset
-dataset = "Coffe_sales.csv"
+dataset = "Housing.csv"
 df = pd.read_csv(dataset)
 
-# Data cleaning and feature engineering:
-# 1. Remove redundant columns (Month_name, Time, Weekday, cash_type, coffee_name)
-# 2. Rename columns for clarity
-# 3. Keep only relevant features for time-based price prediction
+print(f"Dataset: {len(df)} houses, Price range: ${df['price'].min():,} - ${df['price'].max():,}")
 
-# Remove unnecessary columns
-df = df.drop(columns=['Month_name', 'Time', 'Weekday', 'cash_type', 'coffee_name'])
+def prepare_housing_features(df):
+    """ Funcion para procesar los datos """
+    df_processed = df.copy()
+    
+    # Cambiar las columnas que sean si o no a 1 y 0
+    binary_features = ['mainroad', 'guestroom', 'basement', 'hotwaterheating', 'airconditioning', 'prefarea']
+    for feature in binary_features:
+        df_processed[f'{feature}_num'] = (df_processed[feature] == 'yes').astype(int)
+    
+    # Procesar si la casa esta amueblada, semi amueblada o no amueblada
+    df_processed['furnished'] = (df_processed['furnishingstatus'] == 'furnished').astype(int)
+    df_processed['semi_furnished'] = (df_processed['furnishingstatus'] == 'semi-furnished').astype(int)
 
-# Rename columns for better readability
-df.rename(columns={
-    'money': 'Price', 
-    'Time_of_Day': 'Time_of_day', 
-    'hour_of_day': 'Hour_of_day'
-}, inplace=True)
+    # Procesar los cuartos, teniendo en cuenta los banos como un cuarto mas, tambien agregando cuantos banos por cuarto hay
+    df_processed['total_rooms'] = df_processed['bedrooms'] + df_processed['bathrooms']
+    df_processed['area_per_bedroom'] = df_processed['area'] / (df_processed['bedrooms'] + 1e-6)
+    df_processed['bathrooms_per_bedroom'] = df_processed['bathrooms'] / (df_processed['bedrooms'] + 1e-6)
+    
+    return df_processed
 
-# ========================================================================================
-# TRAIN-TEST SPLIT
-# ========================================================================================
+df_housing = prepare_housing_features(df)
 
-# Split dataset into training (70%) and testing (30%) sets
-df_train = df.sample(frac=0.7, random_state=42)
-df_test = df.drop(df_train.index)
 
-# Extract features: Hour of day, Day of week, Month
-# These temporal features will be used to predict coffee prices
-x_train = df_train[['Hour_of_day', "Weekdaysort", "Monthsort"]].values.astype(float)
-x_test = df_test[['Hour_of_day', "Weekdaysort", "Monthsort"]].values.astype(float)
+available_features = [
+    'area', 'bedrooms', 'bathrooms', 'stories', 'parking',
+    'mainroad_num', 'prefarea_num', 'guestroom_num', 'basement_num', 
+    'hotwaterheating_num', 'airconditioning_num', 'furnished', 'semi_furnished',
+    'total_rooms', 'area_per_bedroom', 'bathrooms_per_bedroom'
+]
 
-# Extract target variable: Coffee price
-y_train = df_train['Price'].values.astype(float)
-y_test = df_test['Price'].values.astype(float)
+def predict(X, weight):
+    """ Funcion para hacer las predicciones """
+    return X @ weight
 
-# ========================================================================================
-# FEATURE STANDARDIZATION
-# ========================================================================================
+def cost_with_l2(X, y, weight, lambda_reg=0.0):
+    """ Funcion de costos usando penalizacion L2"""
+    predictions = predict(X, weight)
+    # funcion mean square error
+    mse_cost = (1/2) * np.mean((predictions - y) ** 2)
+    # Nos saltamos el bias weight usamos L2 para poder hacer los pesos mas pequenos y evitar overfitting
+    l2_penalty = (lambda_reg / 2) * np.sum(weight[1:] ** 2)
+    # Regresamos las sumas de MSE y L2
+    return mse_cost + l2_penalty
 
-# Standardize features to have mean=0 and std=1
-# This helps gradient descent converge faster and more reliably
-X_mean = x_train.mean(axis=0)  # Calculate mean from training data only
-X_std = x_train.std(axis=0)    # Calculate std from training data only
+def gradient_with_l2(X, y, weight, lambda_reg=0.0):
+    """ Funcion para obtener el gradiente usando regularizacion L2 """
 
-# Apply standardization using training statistics to both sets
+    # Obtenemos las predicciones usando la funcion predict
+    predictions = predict(X, weight)
+    # Obtenemos el error restando la verdad de as predicciones
+    error = predictions - y
+    # Obtenemos el gradiente  multiplicalndo (1/la cantidad de muestras) y multiplicamos eso por X transpuesta y multiplicando esa matri por el error 
+    grad = (1/len(y)) * X.T @ error
+    
+    # Hacemos un array de 0 igual al weight
+    l2_grad = np.zeros_like(weight)
+    l2_grad[1:] = lambda_reg * weight[1:]
+    grad += l2_grad
+    
+    return grad
+
+def train_model(X_train, y_train, lambda_reg=0.0, learning_rate=0.01, max_epochs=1000, tolerance=1e-6):
+    """ Funcion para entrenar al modelo"""
+
+    # cantidad de muestras que tenemos
+    n_features = X_train.shape[1]
+    # Inicializamos los pesos como random, del tamano de als muestras
+    weight = np.random.normal(0, 0.01, n_features)
+    # Historial de costos
+    cost_history = []
+    
+    for epoch in range(max_epochs):
+        # Optenemos el costo actual
+        current_cost = cost_with_l2(X_train, y_train, weight, lambda_reg)
+        cost_history.append(current_cost)
+        
+        # Obtenemos el gradiente
+        grads = gradient_with_l2(X_train, y_train, weight, lambda_reg)
+        # Actualizamos los pesos con el gradiente y el learning rate
+        weight = weight - learning_rate * grads
+        
+        if len(cost_history) > 1:
+            if abs(cost_history[-2] - cost_history[-1]) < tolerance:
+                break
+    
+    return weight, cost_history
+
+def calculate_r2(y_true, y_pred):
+    """ Funcion para calcular coeficiente de determinacion (R2) """
+
+    # Obtenemos el mean de y
+    y_mean = np.mean(y_true)
+    # Suma total de los cuadrados
+    ss_total = np.sum((y_true - y_mean) ** 2)
+    # Suma residual de los cuadrados
+    ss_residual = np.sum((y_pred - y_true) ** 2)
+    return 1 - (ss_residual / ss_total)
+
+def k_fold_cross_validation(X, y, k=5, lambda_values=[0.0, 0.001, 0.01, 0.1, 1.0]):
+    """ 
+    Funcion para implementar K-Fold cross-validation 
+    
+    k = numero de folds en el que se dividira el dataset
+    lambda_values = lista de valores de regularizacion a probar
+    
+    Devuelve el mejor lambda y un diccionario con los resultados de todos los folds.
+    """
+
+    n_samples = len(X)                # numero total de muestras
+    fold_size = n_samples // k        # tamaño de cada fold
+    
+    best_lambda = 0.0                 # lambda con mejor performance
+    best_score = -np.inf              # mejor R2 promedio
+    results = {}                      # diccionario para almacenar resultados
+    
+    print("\nK-Fold Cross-Validation:")
+    
+    # Itera sobre cada valor de lambda para evaluarlo
+    for lambda_reg in lambda_values:
+        fold_scores = []  # almacenara R2 de cada fold para este lambda
+        
+        # Divide el dataset en k folds
+        for fold in range(k):
+            val_start = fold * fold_size
+            val_end = val_start + fold_size if fold < k-1 else n_samples  # ultimo fold puede ser mas grande
+            
+            # Selecciona el fold actual como conjunto de validacion
+            X_val = X[val_start:val_end]
+            y_val = y[val_start:val_end]
+            
+            # El resto se usa como conjunto de entrenamiento
+            X_train_fold = np.concatenate([X[:val_start], X[val_end:]])
+            y_train_fold = np.concatenate([y[:val_start], y[val_end:]])
+            
+            # Estandarizacion: transforma features para tener mean 0 y std 1
+            X_mean = X_train_fold.mean(axis=0)
+            X_std = X_train_fold.std(axis=0)
+            
+            # Escala los datos
+            X_train_scaled = (X_train_fold - X_mean) / X_std
+            X_val_scaled = (X_val - X_mean) / X_std
+            
+            # Agrega columna de bias (intercept) de 1s
+            X_train_bias = np.column_stack([np.ones(X_train_scaled.shape[0]), X_train_scaled])
+            X_val_bias = np.column_stack([np.ones(X_val_scaled.shape[0]), X_val_scaled])
+            
+            # Entrena el modelo usando el lambda actual
+            weights, _ = train_model(X_train_bias, y_train_fold, lambda_reg, learning_rate=0.001, max_epochs=3000)
+            
+            # Hace predicciones sobre el conjunto de validacion
+            val_predictions = predict(X_val_bias, weights)
+            
+            # Calcula R2 para este fold y lo guarda
+            fold_r2 = calculate_r2(y_val, val_predictions)
+            fold_scores.append(fold_r2)
+        
+        # Calcula R2 promedio y std para este lambda
+        mean_score = np.mean(fold_scores)
+        std_score = np.std(fold_scores)
+        results[lambda_reg] = {'mean': mean_score, 'std': std_score, 'scores': fold_scores}
+        
+        print(f"Regularization {lambda_reg:6.3f}: R2 = {mean_score:.4f} ± {std_score:.4f}")
+        
+        # Actualiza mejor lambda si el promedio R2 es mayor
+        if mean_score > best_score:
+            best_score = mean_score
+            best_lambda = lambda_reg
+    
+    print(f"Best regularization: {best_lambda} with R2 = {best_score:.4f}")
+    return best_lambda, results
+
+X = df_housing[available_features].values.astype(float)
+y = df_housing['price'].values.astype(float)
+
+best_lambda, cv_results = k_fold_cross_validation(X, y, k=5)
+
+train_size = int(len(df_housing) * 0.8)
+df_shuffled = df_housing.sample(frac=1, random_state=42).reset_index(drop=True)
+
+df_train = df_shuffled.iloc[:train_size].copy()
+df_test = df_shuffled.iloc[train_size:].copy()
+
+x_train = df_train[available_features].values.astype(float)
+x_test = df_test[available_features].values.astype(float)
+y_train = df_train['price'].values.astype(float)
+y_test = df_test['price'].values.astype(float)
+
+X_mean = x_train.mean(axis=0)
+X_std = x_train.std(axis=0)
 x_train_scaled = (x_train - X_mean) / X_std
-x_test_scaled = (x_test - X_mean) / X_std   # Use training stats to avoid data leakage
+x_test_scaled = (x_test - X_mean) / X_std
 
-# Add bias column (column of 1s) for the intercept term in linear regression
 x_train_with_bias = np.column_stack([np.ones(x_train_scaled.shape[0]), x_train_scaled])
 x_test_with_bias = np.column_stack([np.ones(x_test_scaled.shape[0]), x_test_scaled])
 
-# ========================================================================================
-# MODEL IMPLEMENTATION - MULTIPLE LINEAR REGRESSION FROM SCRATCH
-# ========================================================================================
+print(f"\nFinal Training: {len(x_train)} train | {len(x_test)} test houses")
 
-# Initialize weights (theta) with small random values
-# Shape: [bias_weight, hour_weight, weekday_weight, month_weight]
-weight = np.random.normal(0, 0.01, 4)
+final_weights, cost_history = train_model(x_train_with_bias, y_train, best_lambda, learning_rate=0.001, max_epochs=4000)
 
-def predict(X, weight):
-    """
-    Make predictions using linear regression
-    Formula: y = X @ theta (matrix multiplication)
+test_predictions = predict(x_test_with_bias, final_weights)
+train_predictions = predict(x_train_with_bias, final_weights)
+
+def evaluate_model(y_true, y_pred, dataset_name=""):
+    errors = y_pred - y_true
+    abs_errors = np.abs(errors)
+    percentage_errors = np.abs(errors / y_true) * 100
     
-    Args:
-        X: Feature matrix with bias column (n_samples, 4)
-        weight: Weight vector (4,)
+    mae = np.mean(abs_errors)
+    rmse = np.sqrt(np.mean(errors**2))
+    mape = np.mean(percentage_errors)
+    r2 = calculate_r2(y_true, y_pred)
     
-    Returns:
-        predictions: Predicted values (n_samples,)
-    """
-    return X @ weight
-
-def cost(X, y, weight):
-    """
-    Calculate Mean Squared Error cost function
-    Formula: J = (1/2m) * sum((predicted - actual)^2)
+    print(f"\n{dataset_name} Performance:")
+    print(f"R2: {r2:.4f} | MAE: ${mae:,.0f} | RMSE: ${rmse:,.0f} | MAPE: {mape:.1f}%")
     
-    Args:
-        X: Feature matrix (n_samples, 4)
-        y: True values (n_samples,)
-        weight: Weight vector (4,)
+    within_10 = np.mean(percentage_errors <= 10) * 100
+    within_20 = np.mean(percentage_errors <= 20) * 100
+    print(f"Within 10% error: {within_10:.1f}% | Within 20% error: {within_20:.1f}%")
     
-    Returns:
-        cost: Single cost value (lower is better)
-    """
-    predictions = predict(X, weight)
-    difference = (predictions - y) ** 2
-    return (1/2) * np.mean(difference)
+    return {'r2': r2, 'mae': mae, 'rmse': rmse, 'mape': mape}
 
-def gradient(X, y, weight):
-    """
-    Calculate gradients for weight updates
-    Formula: grad = (1/m) * X.T @ (predicted - actual)
+train_metrics = evaluate_model(y_train, train_predictions, "Training")
+test_metrics = evaluate_model(y_test, test_predictions, "Test")
+
+overfitting_gap = train_metrics['r2'] - test_metrics['r2']
+print(f"\nOverfitting check: {overfitting_gap:.3f} (good if < 0.10)")
+
+mean_baseline_mae = np.mean(np.abs(np.full(len(y_test), np.mean(y_test)) - y_test))
+improvement = ((mean_baseline_mae - test_metrics['mae']) / mean_baseline_mae) * 100
+print(f"Improvement over baseline: {improvement:.1f}%")
+
+def interpret_features(weights, feature_names, X_std):
+    print(f"\nFeature Impact Analysis:")
     
-    Args:
-        X: Feature matrix (n_samples, 4)
-        y: True values (n_samples,)
-        weight: Current weights (4,)
+    feature_impacts = []
+    for i, (feature, weight) in enumerate(zip(feature_names[1:], weights[1:]), 0):
+        original_impact = weight / X_std[i]
+        feature_impacts.append((feature, original_impact, abs(original_impact)))
     
-    Returns:
-        gradients: Gradient vector (4,) - tells us how to update each weight
-    """
-    predictions = predict(X, weight)
-    error = predictions - y
-    return (1/len(y)) * X.T @ error
-
-# ========================================================================================
-# GRADIENT DESCENT TRAINING
-# ========================================================================================
-
-# Training hyperparameters
-learning_rate = 0.01    # Step size for weight updates
-max_epochs = 1000       # Maximum number of training iterations
-tolerance = 1e-6        # Stop if cost improvement is smaller than this
-
-# Initialize training tracking
-cost_history = []       # Track cost over time to monitor convergence
-theta = weight.copy()   # Current weights (will be updated during training)
-
-print("=== Training Multiple Linear Regression ===")
-
-# Training loop - Gradient Descent Algorithm
-for epoch in range(max_epochs):
-    # Calculate current cost
-    current_cost = cost(x_train_with_bias, y_train, theta)
-    cost_history.append(current_cost)
+    feature_impacts.sort(key=lambda x: x[2], reverse=True)
     
-    # Calculate gradients (how much to change each weight)
-    grads = gradient(x_train_with_bias, y_train, theta)
+    print("Top 8 features:")
+    for i, (feature, impact, abs_impact) in enumerate(feature_impacts[:8], 1):
+        direction = "+" if impact > 0 else "-"
+        
+        if 'area' in feature.lower():
+            print(f"{i}. {feature:20s}: {direction}${abs(impact):6.0f} per sq ft")
+        elif feature in ['bedrooms', 'bathrooms', 'stories']:
+            print(f"{i}. {feature:20s}: {direction}${abs(impact):8,.0f} per unit")
+        elif '_num' in feature:
+            clean_name = feature.replace('_num', '')
+            print(f"{i}. {feature:20s}: {direction}${abs(impact):8,.0f} if present")
+        else:
+            print(f"{i}. {feature:20s}: {direction}${abs(impact):8,.0f} per unit")
     
-    # Update weights using gradient descent rule: theta = theta - alpha * gradient
-    theta = theta - learning_rate * grads
-    
-    # Print progress every 100 epochs
-    if epoch % 100 == 0:
-        print(f"Epoch {epoch}: Cost = {current_cost:.4f}")
-    
-    # Early stopping: if cost stops improving significantly, stop training
-    if len(cost_history) > 1:
-        if abs(cost_history[-2] - cost_history[-1]) < tolerance:
-            print(f"Converged at epoch {epoch}")
-            break
+    return feature_impacts
 
-print(f"Final training cost: {cost_history[-1]:.4f}")
-print(f"Learned weights: {theta}")
-print(f"Model equation: Price = {theta[0]:.2f} + {theta[1]:.2f}*hour + {theta[2]:.2f}*weekday + {theta[3]:.2f}*month")
+feature_impacts = interpret_features(final_weights, ['Bias'] + available_features, X_std)
 
-# ========================================================================================
-# MODEL EVALUATION
-# ========================================================================================
-
-# Make predictions on test set
-test_predictions = predict(x_test_with_bias, theta)
-test_cost = cost(x_test_with_bias, y_test, theta)
-
-print(f"\nTest set cost: {test_cost:.4f}")
-
-def accuracy_by_price_range(predictions, actual):
-    """Analyze model accuracy across different price ranges"""
-    low_range = actual <= 25     # Budget coffees
-    mid_range = (actual > 25) & (actual <= 35)  # Standard coffees  
-    high_range = actual > 35     # Premium coffees
-    
-    print("=== Accuracy by Price Range ===")
-    for range_name, mask in [("Low ($18-25)", low_range), 
-                            ("Mid ($25-35)", mid_range), 
-                            ("High ($35+)", high_range)]:
-        if np.sum(mask) > 0:
-            range_mae = np.mean(np.abs(predictions[mask] - actual[mask]))
-            range_rmse = np.sqrt(np.mean((predictions[mask] - actual[mask])**2))
-            count = np.sum(mask)
-            print(f"{range_name}: {count} samples, MAE: ${range_mae:.2f}, RMSE: ${range_rmse:.2f}")
-
-def accuracy_within_threshold(predictions, actual, thresholds=[1, 2, 3, 5]):
-    """Calculate percentage of predictions within acceptable error ranges"""
-    print("\n=== Predictions Within Error Thresholds ===")
-    errors = np.abs(predictions - actual)
-    
-    for threshold in thresholds:
-        within_threshold = np.sum(errors <= threshold)
-        percentage = (within_threshold / len(errors)) * 100
-        print(f"Within ${threshold}: {within_threshold}/{len(errors)} ({percentage:.1f}%)")
-
-def compare_to_baselines(predictions, actual):
-    """Compare model performance to simple baseline models"""
-    print("\n=== Comparison to Baseline Models ===")
-    
-    # Baseline 1: Always predict the mean price
-    mean_baseline = np.full(len(actual), np.mean(actual))
-    mean_mae = np.mean(np.abs(mean_baseline - actual))
-    mean_rmse = np.sqrt(np.mean((mean_baseline - actual)**2))
-    
-    # Baseline 2: Always predict the median price
-    median_baseline = np.full(len(actual), np.median(actual))
-    median_mae = np.mean(np.abs(median_baseline - actual))
-    median_rmse = np.sqrt(np.mean((median_baseline - actual)**2))
-    
-    # Our trained model
-    model_mae = np.mean(np.abs(predictions - actual))
-    model_rmse = np.sqrt(np.mean((predictions - actual)**2))
-    
-    print(f"Your Model    - MAE: ${model_mae:.2f}, RMSE: ${model_rmse:.2f}")
-    print(f"Mean Baseline - MAE: ${mean_mae:.2f}, RMSE: ${mean_rmse:.2f}")
-    print(f"Median Baseline - MAE: ${median_mae:.2f}, RMSE: ${median_rmse:.2f}")
-    
-    # Calculate improvement percentages
-    improvement_vs_mean = ((mean_mae - model_mae) / mean_mae) * 100
-    improvement_vs_median = ((median_mae - model_mae) / median_mae) * 100
-    
-    print(f"\nImprovement over mean baseline: {improvement_vs_mean:.1f}%")
-    print(f"Improvement over median baseline: {improvement_vs_median:.1f}%")
-
-# Run all evaluation metrics
-accuracy_by_price_range(test_predictions, y_test)
-accuracy_within_threshold(test_predictions, y_test)
-compare_to_baselines(test_predictions, y_test)
-
-# ========================================================================================
-# VISUALIZATION
-# ========================================================================================
-
-# Create comprehensive visualization of model performance
 plt.figure(figsize=(15, 10))
 
-# Plot 1: Predicted vs Actual prices
 plt.subplot(2, 3, 1)
-plt.scatter(y_test, test_predictions, alpha=0.6, color='blue')
-plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2, label='Perfect Prediction')
-plt.xlabel('Actual Price ($)')
-plt.ylabel('Predicted Price ($)')
-plt.title('Predicted vs Actual Prices')
-plt.legend()
+lambda_values = list(cv_results.keys())
+mean_scores = [cv_results[l]['mean'] for l in lambda_values]
+std_scores = [cv_results[l]['std'] for l in lambda_values]
+plt.errorbar(lambda_values, mean_scores, yerr=std_scores, marker='o', capsize=5)
+plt.axvline(x=best_lambda, color='red', linestyle='--', alpha=0.7)
+plt.xscale('log')
+plt.xlabel('Regularization Parameter')
+plt.ylabel('Cross-Validation R2')
+plt.title('Hyperparameter Tuning')
 plt.grid(True, alpha=0.3)
 
-# Plot 2: Residuals (prediction errors)
 plt.subplot(2, 3, 2)
+plt.scatter(y_test, test_predictions, alpha=0.6, color='blue')
+plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2)
+plt.xlabel('Actual Price ($)')
+plt.ylabel('Predicted Price ($)')
+plt.title(f'Predicted vs Actual (R2 = {test_metrics["r2"]:.3f})')
+plt.grid(True, alpha=0.3)
+
+plt.subplot(2, 3, 3)
 residuals = test_predictions - y_test
 plt.scatter(test_predictions, residuals, alpha=0.6, color='red')
-plt.axhline(y=0, color='black', linestyle='--', alpha=0.8)
+plt.axhline(y=0, color='black', linestyle='--')
 plt.xlabel('Predicted Price ($)')
-plt.ylabel('Residual (Predicted - Actual)')
+plt.ylabel('Residual ($)')
 plt.title('Residual Plot')
 plt.grid(True, alpha=0.3)
 
-# Plot 3: Distribution of prediction errors
-plt.subplot(2, 3, 3)
-plt.hist(np.abs(residuals), bins=25, alpha=0.7, color='green', edgecolor='black')
-plt.xlabel('Absolute Error ($)')
-plt.ylabel('Frequency')
-plt.title('Distribution of Prediction Errors')
-plt.grid(True, alpha=0.3)
-
-# Plot 4: Training progress (cost vs iterations)
 plt.subplot(2, 3, 4)
 plt.plot(cost_history, color='purple', linewidth=2)
 plt.xlabel('Iteration')
-plt.ylabel('Cost (MSE)')
-plt.title('Training Progress')
+plt.ylabel('Cost')
+plt.title(f'Training Convergence')
 plt.grid(True, alpha=0.3)
 
-# Plot 5: Feature importance (weight magnitudes)
 plt.subplot(2, 3, 5)
-feature_names = ['Bias', 'Hour', 'Weekday', 'Month']
-colors = ['red' if w < 0 else 'blue' for w in theta]
-plt.bar(feature_names, np.abs(theta), color=colors, alpha=0.7)
-plt.xlabel('Features')
-plt.ylabel('Weight Magnitude')
-plt.title('Feature Importance (Weight Magnitudes)')
-plt.xticks(rotation=45)
+top_features = feature_impacts[:8]
+feature_names_clean = [f.replace('_num', '').replace('_', ' ').title() for f, _, _ in top_features]
+impacts = [abs(imp) for _, imp, _ in top_features]
+colors = ['blue' if feature_impacts[i][1] > 0 else 'red' for i in range(8)]
+plt.barh(range(len(top_features)), impacts, color=colors, alpha=0.7)
+plt.yticks(range(len(top_features)), feature_names_clean)
+plt.xlabel('Impact on Price ($)')
+plt.title('Feature Importance')
 plt.grid(True, alpha=0.3)
 
-# Plot 6: Actual vs predicted price distributions
 plt.subplot(2, 3, 6)
-plt.hist(y_test, bins=25, alpha=0.5, label='Actual Prices', color='blue', density=True)
-plt.hist(test_predictions, bins=25, alpha=0.5, label='Predicted Prices', color='red', density=True)
-plt.xlabel('Price ($)')
-plt.ylabel('Density')
-plt.title('Price Distribution Comparison')
-plt.legend()
+percentage_errors = np.abs((test_predictions - y_test) / y_test) * 100
+plt.hist(percentage_errors, bins=20, alpha=0.7, color='green', edgecolor='black')
+plt.xlabel('Absolute Percentage Error (%)')
+plt.ylabel('Frequency')
+plt.title(f'Error Distribution (MAPE = {test_metrics["mape"]:.1f}%)')
 plt.grid(True, alpha=0.3)
 
 plt.tight_layout()
 plt.show()
 
-# ========================================================================================
-# SUMMARY STATISTICS
-# ========================================================================================
+print(f"\nSample Predictions:")
+sample_indices = np.random.choice(len(y_test), 3, replace=False)
 
-print("\n" + "="*70)
-print("FINAL MODEL SUMMARY")
-print("="*70)
-print(f"Training samples: {len(x_train)} | Test samples: {len(x_test)}")
-print(f"Features used: Hour of day, Day of week, Month")
-print(f"Target variable: Coffee price (${y_test.min():.2f} - ${y_test.max():.2f})")
-print(f"Final training cost: {cost_history[-1]:.4f}")
-print(f"Test set cost: {test_cost:.4f}")
-print(f"Model converged in {len(cost_history)} iterations")
+for i, idx in enumerate(sample_indices, 1):
+    actual = y_test[idx]
+    predicted = test_predictions[idx]
+    error_pct = abs((predicted - actual) / actual) * 100
+    house = df_test.iloc[idx]
+    
+    print(f"House {i}: {house['area']:,} sq ft, {house['bedrooms']} bed, {house['bathrooms']} bath")
+    print(f"  Actual: ${actual:,.0f} | Predicted: ${predicted:,.0f} | Error: {error_pct:.1f}%")
 
-# Calculate R-squared score
-y_mean = np.mean(y_test)
-ss_total = np.sum((y_test - y_mean) ** 2)
-ss_residual = np.sum((test_predictions - y_test) ** 2)
-r2_score = 1 - (ss_residual / ss_total)
-print(f"R-squared score: {r2_score:.4f} ({r2_score*100:.1f}% of variance explained)")
-
-print("\nModel Interpretation:")
-print(f"- Base price: ${theta[0]:.2f}")
-print(f"- Hour effect: ${theta[1]:.2f} per hour")
-print(f"- Weekday effect: ${theta[2]:.2f} per day")
-print(f"- Month effect: ${theta[3]:.2f} per month")
-print("="*70)
+print(f"\nFINAL MODEL SUMMARY")
+print(f"Best Regularization: {best_lambda}")
+print(f"Test R2: {test_metrics['r2']:.4f} | Test MAPE: {test_metrics['mape']:.1f}%")
+print(f"Baseline Improvement: {improvement:.1f}%")
+print(f"Training Iterations: {len(cost_history)}")
+print(f"Top Price Driver: {feature_impacts[0][0].replace('_num', '').title()}")
+print(f"Predictions within 20%: {np.mean(percentage_errors <= 20):.0%}")
