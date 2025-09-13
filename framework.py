@@ -111,8 +111,9 @@ best_alpha, cv_results = k_fold_cv_ridge(X_train_val, y_train_val, k=5, alphas=a
 print(f"Best alpha (regularization): {best_alpha}\n")
 
 # =======================
-# 7. Entrenar modelo final con mejor alpha
+# 7. Entrenar modelo final con mejor alpha y modelo sin regularizacion
 # =======================
+
 print("Entrenando modelo con regularización...")
 model_reg, scaler_reg, y_train_pred_r, y_val_pred_r, metrics_r = train_ridge(
     X_train, y_train, X_val, y_val, alpha=best_alpha
@@ -125,7 +126,16 @@ print("Train MAPE:", metrics_r['train_mape'], "| Validation MAPE:", metrics_r['v
 # 8. Evaluación final en Test
 # =======================
 X_test_scaled = scaler_reg.transform(X_test)
+
+# Predicciones con los dos modelos
+y_test_pred_nr = model_no_reg.predict(X_test_scaled)
 y_test_pred = model_reg.predict(X_test_scaled)
+
+test_metrics_nr = {
+    'test_r2': r2_score(y_test, y_test_pred_nr),
+    'test_mape': mean_absolute_percentage_error(y_test, y_test_pred_nr) * 100,
+    'test_rmse': np.sqrt(mean_squared_error(y_test, y_test_pred_nr))
+}
 
 test_metrics = {
     'test_r2': r2_score(y_test, y_test_pred),
@@ -133,7 +143,12 @@ test_metrics = {
     'test_rmse': np.sqrt(mean_squared_error(y_test, y_test_pred))
 }
 
-print("Métricas Test Set:")
+print("Métricas Test Set Sin Regularizacion:")
+print(f"R2: {test_metrics_nr['test_r2']}")
+print(f"RMSE: {test_metrics_nr['test_rmse']}")
+print(f"MAPE: {test_metrics_nr['test_mape']}\n")
+
+print("Métricas Test Set Con Regularizacion:")
 print(f"R2: {test_metrics['test_r2']}")
 print(f"RMSE: {test_metrics['test_rmse']}")
 print(f"MAPE: {test_metrics['test_mape']}\n")
@@ -202,4 +217,4 @@ plt.title('Cross-Validation R2 vs Alpha')
 plt.savefig("cv_r2_alpha.png")
 plt.close()
 
-print("Todas las gráficas se han guardado en archivos PNG para el reporte.")
+print("Graficas guardadas.")

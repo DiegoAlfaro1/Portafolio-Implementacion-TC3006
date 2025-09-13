@@ -1,0 +1,350 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+
+\geometry{margin=2.5cm}
+
+\title{Predicción de Precios de Vivienda: Implementación y Evaluación de Modelo de Regresión Ridge}
+\author{Diego Alfaro Pinto\\ a01709971@tec.mx}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Este documento presenta la implementación y evaluación de un modelo de Inteligencia Artificial para predecir precios de viviendas utilizando el dataset "Housing". El objetivo del modelo es predecir con precisión el precio de una vivienda basándose en sus características físicas y ubicación. Se utilizó un modelo de regresión Ridge con técnicas de regularización, que fue entrenado con datos sobre área, número de habitaciones, baños, y diversas características de la propiedad. Los resultados indican que el modelo logra un coeficiente de determinación (R²) de 0.683 en el conjunto de prueba, con un error porcentual medio absoluto (MAPE) de 21.88\%. Se implementaron técnicas de validación cruzada y regularización para optimizar el rendimiento del modelo y reducir el overfitting.
+
+\textbf{Keywords:} Housing Price Prediction, Ridge Regression, Regularization, Cross Validation, Machine Learning, Real Estate.
+\end{abstract}
+
+\section{Introducción}
+
+La predicción de precios de viviendas es un problema fundamental en el sector inmobiliario que ha cobrado gran relevancia con el avance de las técnicas de machine learning. La capacidad de estimar con precisión el valor de una propiedad basándose en sus características físicas y de ubicación es crucial tanto para compradores como vendedores, así como para instituciones financieras y agencias inmobiliarias.
+
+Los modelos de regresión han demostrado ser especialmente efectivos para este tipo de predicciones, ya que pueden capturar las relaciones complejas entre múltiples variables explicativas y el precio final de la vivienda. En particular, la regresión Ridge ofrece ventajas significativas al incorporar técnicas de regularización que ayudan a prevenir el overfitting y mejorar la generalización del modelo.
+
+El objetivo de este trabajo es implementar y evaluar un modelo de regresión Ridge para predecir precios de viviendas, aplicando técnicas de validación cruzada y regularización para optimizar su rendimiento. Se analizará el comportamiento del modelo en términos de bias, varianza y ajuste, comparando el rendimiento antes y después de aplicar técnicas de regularización.
+
+\section{Descripción del Dataset}
+
+El dataset Housing contiene información detallada sobre 545 propiedades inmobiliarias con múltiples características relevantes para la predicción de precios. Los datos incluyen tanto variables numéricas como categóricas que describen aspectos físicos, de ubicación y amenidades de las propiedades.
+
+\subsection{Características del Dataset}
+
+El dataset incluye las siguientes variables:
+
+\begin{itemize}
+    \item \textbf{price}: Precio de la vivienda (variable objetivo)
+    \item \textbf{area}: Área total de la propiedad en pies cuadrados
+    \item \textbf{bedrooms}: Número de dormitorios
+    \item \textbf{bathrooms}: Número de baños
+    \item \textbf{stories}: Número de pisos
+    \item \textbf{mainroad}: Acceso a carretera principal (yes/no)
+    \item \textbf{guestroom}: Presencia de cuarto de huéspedes (yes/no)
+    \item \textbf{basement}: Presencia de sótano (yes/no)
+    \item \textbf{hotwaterheating}: Sistema de calentamiento de agua (yes/no)
+    \item \textbf{airconditioning}: Aire acondicionado (yes/no)
+    \item \textbf{parking}: Número de espacios de estacionamiento
+    \item \textbf{prefarea}: Ubicación en área preferencial (yes/no)
+    \item \textbf{furnishingstatus}: Estado del amueblado (furnished/semi-furnished/unfurnished)
+\end{itemize}
+
+\section{Preprocesamiento de Datos}
+
+\subsection{Ingeniería de Características}
+
+Se aplicaron diversas técnicas de ingeniería de características para mejorar la capacidad predictiva del modelo:
+
+\begin{itemize}
+    \item \textbf{Codificación de variables binarias}: Las variables categóricas binarias (yes/no) se convirtieron a formato numérico (1/0).
+    \item \textbf{Codificación one-hot para furnishingstatus}: Se crearon variables dummy para los diferentes estados de amueblado.
+    \item \textbf{Características derivadas}: Se crearon nuevas variables como:
+    \begin{itemize}
+        \item total\_rooms = bedrooms + bathrooms
+        \item area\_per\_bedroom = area / bedrooms
+        \item bathrooms\_per\_bedroom = bathrooms / bedrooms
+    \end{itemize}
+\end{itemize}
+
+\subsection{Normalización}
+
+Se aplicó StandardScaler para normalizar todas las características numéricas, asegurando que todas las variables estén en la misma escala y mejorando la estabilidad numérica del modelo de regresión Ridge.
+
+\subsection{División del Dataset}
+
+El dataset se dividió en tres conjuntos:
+\begin{itemize}
+    \item \textbf{Entrenamiento}: 69.9\% (381 instancias)
+    \item \textbf{Validación}: 15.0\% (82 instancias)
+    \item \textbf{Prueba}: 15.0\% (82 instancias)
+\end{itemize}
+
+Esta división permite evaluar adecuadamente el comportamiento del modelo y su capacidad de generalización.
+
+\section{Implementación del Modelo}
+
+\subsection{Modelo Base: Ridge Regression sin Regularización}
+
+Se implementó inicialmente un modelo de regresión Ridge con $\alpha = 0.0$ (equivalente a regresión lineal simple) para establecer una línea base de rendimiento.
+
+\textbf{Resultados del Modelo Base:}
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|c|c|c|c|}
+    \hline
+    \textbf{Conjunto} & \textbf{R²} & \textbf{RMSE} & \textbf{MAPE (\%)} \\
+    \hline
+    Entrenamiento & 0.690 & 1,012,872 & 15.93 \\
+    Validación & 0.615 & 1,169,666 & 18.63 \\
+    \hline
+    \end{tabular}
+    \caption{Métricas del modelo sin regularización}
+    \label{tab:base_model}
+\end{table}
+
+\subsection{Optimización con Validación Cruzada}
+
+Se implementó validación cruzada k-fold (k=5) para determinar el valor óptimo del parámetro de regularización $\alpha$. Los valores evaluados fueron: [0.001, 0.01, 0.1, 1.0].
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{cv_r2_alpha.png}
+    \caption{Validación cruzada: R² vs Alpha}
+    \label{fig:cv_alpha}
+\end{figure}
+
+\textbf{Mejor valor de $\alpha$}: 1.0
+
+\subsection{Modelo Optimizado con Regularización}
+
+Utilizando el mejor valor de $\alpha$ encontrado, se entrenó el modelo final con regularización Ridge.
+
+\textbf{Resultados del Modelo Regularizado:}
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|c|c|c|c|}
+    \hline
+    \textbf{Conjunto} & \textbf{R²} & \textbf{RMSE} & \textbf{MAPE (\%)} \\
+    \hline
+    Entrenamiento & 0.690 & 1,011,798 & 15.87 \\
+    Validación & 0.615 & 1,169,729 & 18.58 \\
+    Prueba & 0.683 & 1,157,037 & 21.88 \\
+    \hline
+    \end{tabular}
+    \caption{Métricas del modelo con regularización}
+    \label{tab:regularized_model}
+\end{table}
+
+\section{Evaluación y Análisis de Rendimiento}
+
+\subsection{Análisis de Bias y Varianza}
+
+\subsubsection{Modelo sin Regularización}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{bias_variance_no_reg.png}
+    \caption{Análisis Bias/Varianza sin regularización}
+    \label{fig:bias_var_no_reg}
+\end{figure}
+
+\textbf{Diagnóstico de Bias}: MEDIO
+
+\textbf{Explicación}: Con un R² de entrenamiento de 0.690, el modelo captura aproximadamente el 69\% de la variabilidad en los datos, indicando que hay espacio para mejora pero el bias no es excesivamente alto. El modelo logra un ajuste razonable a los datos de entrenamiento.
+
+\textbf{Diagnóstico de Varianza}: MEDIO-ALTO
+
+\textbf{Explicación}: La diferencia entre el R² de entrenamiento (0.690) y validación (0.615) es de 0.075, lo que indica una varianza moderada-alta. Esta brecha sugiere cierto grado de overfitting, donde el modelo se ajusta demasiado a los datos de entrenamiento.
+
+\subsubsection{Modelo con Regularización}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{bias_variance_reg.png}
+    \caption{Análisis Bias/Varianza con regularización}
+    \label{fig:bias_var_reg}
+\end{figure}
+
+\textbf{Diagnóstico de Bias}: MEDIO
+
+\textbf{Explicación}: La regularización mantiene prácticamente el mismo R² de entrenamiento (0.690), indicando que el bias se mantiene en un nivel similar. La regularización $\alpha = 1.0$ es lo suficientemente suave para no introducir underfitting significativo.
+
+\textbf{Diagnóstico de Varianza}: MEDIO-ALTO
+
+\textbf{Explicación}: La diferencia entre entrenamiento y validación se mantiene prácticamente igual (0.075), sugiriendo que la regularización con $\alpha = 1.0$ tuvo un impacto mínimo en la reducción de varianza. Sin embargo, las métricas en el conjunto de prueba (R² = 0.683) muestran mejor generalización.
+
+\subsection{Nivel de Ajuste del Modelo}
+
+\subsubsection{Modelo sin Regularización}
+
+\textbf{Diagnóstico}: OVERFITTING LEVE
+
+\textbf{Justificación}: La diferencia del 7.5\% entre el rendimiento de entrenamiento y validación indica overfitting moderado. El modelo se ajusta mejor a los datos de entrenamiento de lo que puede generalizar a datos no vistos.
+
+\subsubsection{Modelo con Regularización}
+
+\textbf{Diagnóstico}: OVERFITTING LEVE
+
+\textbf{Justificación}: Aunque las métricas de entrenamiento y validación son similares al modelo sin regularización, el rendimiento en el conjunto de prueba (R² = 0.683) es superior, indicando mejor capacidad de generalización. La regularización ayudó a mantener un equilibrio entre bias y varianza.
+
+\section{Análisis de Resultados}
+
+\subsection{Predicciones vs Valores Reales}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{pred_vs_actual.png}
+    \caption{Predicciones vs Valores Reales (Conjunto de Prueba)}
+    \label{fig:pred_vs_actual}
+\end{figure}
+
+La dispersión de los puntos muestra una correlación positiva fuerte entre las predicciones y los valores reales. La mayoría de los puntos se concentran cerca de la línea diagonal de referencia, especialmente en el rango de precios medios (4-8 millones). Se observa mayor dispersión en los precios más altos, lo que es común en problemas de regresión con datos de precios inmobiliarios.
+
+\subsection{Análisis de Residuos}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{residuals.png}
+    \caption{Distribución de Residuos}
+    \label{fig:residuals}
+\end{figure}
+
+La distribución de residuos indica una distribución aproximadamente normal con media centrada en cero, lo que es deseable en modelos de regresión. La forma de la distribución sugiere que el modelo no presenta sesgos sistemáticos significativos, aunque se observa una ligera asimetría hacia la derecha que puede indicar que el modelo subestima ocasionalmente precios altos.
+
+\subsection{Errores Porcentuales}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{percentage_error.png}
+    \caption{Distribución de Errores Porcentuales Absolutos}
+    \label{fig:percentage_error}
+\end{figure}
+
+El error porcentual promedio es de 21.88\%, lo que indica una precisión práctica aceptable para aplicaciones inmobiliarias. La distribución muestra que la mayoría de las predicciones tienen errores menores al 30\%, con una concentración significativa de predicciones con errores menores al 20\%. Esto representa un nivel de precisión útil para evaluaciones inmobiliarias preliminares.
+
+\subsection{Importancia de Características}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{feature_importance.png}
+    \caption{Importancia de las 8 Características Principales}
+    \label{fig:feature_importance}
+\end{figure}
+
+Las características más importantes para la predicción son:
+\begin{enumerate}
+    \item \textbf{bathrooms}: La característica más influyente, reflejando la importancia de las amenidades básicas
+    \item \textbf{airconditioning\_num}: El aire acondicionado es un factor determinante del precio
+    \item \textbf{prefarea\_num}: La ubicación en áreas preferenciales tiene alto impacto
+    \item \textbf{stories}: El número de pisos afecta significativamente el valor
+    \item \textbf{basement\_num}: La presencia de sótano agrega valor considerable
+    \item \textbf{hotwaterheating\_num}: Los sistemas de calefacción influyen en el precio
+    \item \textbf{furnished}: El estado del amueblado es relevante para la valoración
+    \item \textbf{mainroad\_num}: El acceso a carreteras principales es un factor importante
+\end{enumerate}
+
+\section{Comparación de Modelos}
+
+\subsection{Análisis Comparativo}
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|l|c|c|c|}
+    \hline
+    \textbf{Modelo} & \textbf{Test R²} & \textbf{Test RMSE} & \textbf{Test MAPE} \\
+    \hline
+    Sin Regularización & 0.681 & 1,160,471 & 22.08\% \\
+    Con Regularización & 0.683 & 1,157,037 & 21.88\% \\
+    \hline
+    \textbf{Cambio} & +0.002 & -3,434 & -0.20\% \\
+    \hline
+    \end{tabular}
+    \caption{Comparación de rendimiento entre modelos}
+    \label{tab:model_comparison}
+\end{table}
+
+\subsection{Impacto de la Regularización}
+
+La implementación de regularización Ridge produjo mejoras ligeras pero consistentes en el rendimiento del modelo:
+
+\begin{itemize}
+    \item \textbf{Mejoras en Generalización}: El R² aumentó de 0.681 a 0.683 y tanto el RMSE como el MAPE se redujeron ligeramente, lo que indica un ajuste más estable al conjunto de prueba.
+    \item \textbf{Estabilidad del Modelo}: Aunque la mejora es marginal, la regularización contribuye a reducir la sensibilidad a pequeñas variaciones en los datos y ofrece mayor robustez.
+    \item \textbf{Eficiencia sin Sacrificio}: Se mantiene un desempeño muy similar al modelo sin regularización, pero con un sesgo levemente menor y mejor capacidad de generalización.
+\end{itemize}
+
+
+\section{Conclusiones}
+
+Los resultados obtenidos demuestran que:
+
+\begin{enumerate}
+    \item El modelo de regresión Ridge es efectivo para la predicción de precios de vivienda, logrando un R² de 0.683 en el conjunto de prueba, explicando aproximadamente el 68.3\% de la variabilidad en los precios.
+    \item La regularización con $\alpha = 1.0$ mantuvo el equilibrio entre bias y varianza sin degradar significativamente el rendimiento, proporcionando mayor estabilidad al modelo.
+    \item Las características más importantes para la predicción son el número de baños, aire acondicionado, y ubicación en área preferencial, lo que refleja la importancia de amenidades y ubicación en la valoración inmobiliaria.
+    \item El modelo presenta un MAPE de 21.88\%, que representa una precisión práctica aceptable para aplicaciones de valoración inmobiliaria preliminar.
+    \item El análisis de residuos indica que el modelo no presenta sesgos sistemáticos significativos, con una distribución aproximadamente normal.
+\end{enumerate}
+
+\subsection{Trabajo Futuro}
+
+Posibles mejoras incluyen:
+\begin{itemize}
+    \item Explorar otros algoritmos de regularización (Lasso, Elastic Net) para potencial reducción de características
+    \item Implementar feature selection más avanzado para identificar interacciones no lineales
+    \item Considerar transformaciones logarítmicas de la variable objetivo para manejar mejor la variabilidad en precios altos
+    \item Evaluar modelos no lineales (Random Forest, Gradient Boosting) para capturar relaciones complejas
+    \item Implementar validación cruzada más exhaustiva con búsqueda en grilla para optimización de hiperparámetros
+\end{itemize}
+
+\section{Referencias}
+
+\begin{thebibliography}{9}
+
+    \bibitem{geron2019hands}
+    Geron, A. (2019). \textit{Hands-On Machine Learning with Scikit-Learn and TensorFlow: Concepts, Tools, and Techniques to Build Intelligent Systems}. O'Reilly Media.
+
+    \bibitem{chollet2018deep}
+    Chollet, F. (2018). \textit{Deep Learning with Python} (2.ª ed.). Manning Publications Co.
+    
+    \bibitem{devore2016probabilidad}
+    Devore, J. L. (2016). \textit{Probabilidad y Estadística para Ingeniería y Ciencias} (9.ª ed.). Cengage Learning.
+
+
+\end{thebibliography}
+
+\section{Anexos}
+
+\subsection{Código Principal}
+El código completo de la implementación se encuentra disponible en el repositorio del proyecto, incluyendo el preprocesamiento de datos, implementación del modelo Ridge, validación cruzada, y generación de visualizaciones. \href{https://github.com/DiegoAlfaro1/Portafolio-Implementacion-TC3006}{Link al repositorio}
+
+\subsection{Métricas Detalladas}
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|l|c|c|c|c|}
+    \hline
+    \textbf{Métrica} & \textbf{Train} & \textbf{Validation} & \textbf{Test} & \textbf{Unidad} \\
+    \hline
+    R² Score & 0.690 & 0.615 & 0.683 & -- \\
+    RMSE & 1,011,798 & 1,169,729 & 1,157,037 & Precio \\
+    MAPE & 15.87\% & 18.58\% & 21.88\% & Porcentaje \\
+    \hline
+    \end{tabular}
+    \caption{Métricas detalladas del modelo final con regularización}
+    \label{tab:detailed_metrics}
+\end{table}
+
+\end{document}
