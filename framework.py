@@ -50,7 +50,14 @@ y = df_housing['price'].values.astype(float)
 X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=0.15, random_state=42)
 X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=0.1765, random_state=42)
 
-print(f"Train: {len(X_train)}, Validation: {len(X_val)}, Test: {len(X_test)}\n")
+print("="*60)
+print("DIVISIÓN DEL DATASET")
+print("="*60)
+print(f"Conjunto de Entrenamiento: {len(X_train)} muestras ({len(X_train)/len(X)*100:.1f}%)")
+print(f"Conjunto de Validación:    {len(X_val)} muestras ({len(X_val)/len(X)*100:.1f}%)")
+print(f"Conjunto de Prueba:        {len(X_test)} muestras ({len(X_test)/len(X)*100:.1f}%)")
+print(f"Total:                     {len(X)} muestras")
+print()
 
 # =======================
 # 4. Función para entrenar y evaluar Ridge
@@ -80,14 +87,21 @@ def train_ridge(X_train, y_train, X_val, y_val, alpha=0.0):
 # =======================
 # 5. Evaluación sin regularización
 # =======================
-print("Evaluando modelo sin regularización...")
+print("="*60)
+print("MODELO SIN REGULARIZACIÓN (α = 0.0)")
+print("="*60)
 alpha_no_reg = 0.0
 model_no_reg, scaler_no_reg, y_train_pred_nr, y_val_pred_nr, metrics_nr = train_ridge(
     X_train, y_train, X_val, y_val, alpha=alpha_no_reg
 )
-print("Train R2:", metrics_nr['train_r2'], "| Validation R2:", metrics_nr['val_r2'])
-print("Train RMSE:", metrics_nr['train_rmse'], "| Validation RMSE:", metrics_nr['val_rmse'])
-print("Train MAPE:", metrics_nr['train_mape'], "| Validation MAPE:", metrics_nr['val_mape'], "\n")
+print(f"Train R²:    {metrics_nr['train_r2']:.4f}")
+print(f"Train RMSE:  ${metrics_nr['train_rmse']:,.2f}")
+print(f"Train MAPE:  {metrics_nr['train_mape']:.2f}%")
+print()
+print(f"Val R²:      {metrics_nr['val_r2']:.4f}")
+print(f"Val RMSE:    ${metrics_nr['val_rmse']:,.2f}")
+print(f"Val MAPE:    {metrics_nr['val_mape']:.2f}%")
+print()
 
 # =======================
 # 6. K-Fold CV para encontrar mejor alpha
@@ -106,21 +120,39 @@ def k_fold_cv_ridge(X, y, k=5, alphas=[0.0, 0.001, 0.01, 0.05, 0.1, 0.5, 1.0]):
     best_alpha = max(results, key=lambda a: results[a]['mean_r2'])
     return best_alpha, results
 
+print("="*60)
+print("VALIDACIÓN CRUZADA K-FOLD (k=5)")
+print("="*60)
 alpha_values = [0.0, 0.001, 0.01, 0.05, 0.1, 0.5, 1.0]
 best_alpha, cv_results = k_fold_cv_ridge(X_train_val, y_train_val, k=5, alphas=alpha_values)
-print(f"Best alpha (regularization): {best_alpha}\n")
+
+print("Resultados por valor de α:")
+print("-"*40)
+for alpha in alpha_values:
+    mean_r2 = cv_results[alpha]['mean_r2']
+    std_r2 = cv_results[alpha]['std_r2']
+    print(f"α = {alpha:6.3f}: R² medio = {mean_r2:.4f} (±{std_r2:.4f})")
+print("-"*40)
+print(f"Mejor α encontrado: {best_alpha}")
+print()
 
 # =======================
-# 7. Entrenar modelo final con mejor alpha y modelo sin regularizacion
+# 7. Entrenar modelo final con mejor alpha
 # =======================
-
-print("Entrenando modelo con regularización...")
+print("="*60)
+print(f"MODELO CON REGULARIZACIÓN (α = {best_alpha})")
+print("="*60)
 model_reg, scaler_reg, y_train_pred_r, y_val_pred_r, metrics_r = train_ridge(
     X_train, y_train, X_val, y_val, alpha=best_alpha
 )
-print("Train R2:", metrics_r['train_r2'], "| Validation R2:", metrics_r['val_r2'])
-print("Train RMSE:", metrics_r['train_rmse'], "| Validation RMSE:", metrics_r['val_rmse'])
-print("Train MAPE:", metrics_r['train_mape'], "| Validation MAPE:", metrics_r['val_mape'], "\n")
+print(f"Train R²:    {metrics_r['train_r2']:.4f}")
+print(f"Train RMSE:  ${metrics_r['train_rmse']:,.2f}")
+print(f"Train MAPE:  {metrics_r['train_mape']:.2f}%")
+print()
+print(f"Val R²:      {metrics_r['val_r2']:.4f}")
+print(f"Val RMSE:    ${metrics_r['val_rmse']:,.2f}")
+print(f"Val MAPE:    {metrics_r['val_mape']:.2f}%")
+print()
 
 # =======================
 # 8. Evaluación final en Test
@@ -143,78 +175,128 @@ test_metrics = {
     'test_rmse': np.sqrt(mean_squared_error(y_test, y_test_pred))
 }
 
-print("Métricas Test Set Sin Regularizacion:")
-print(f"R2: {test_metrics_nr['test_r2']}")
-print(f"RMSE: {test_metrics_nr['test_rmse']}")
-print(f"MAPE: {test_metrics_nr['test_mape']}\n")
-
-print("Métricas Test Set Con Regularizacion:")
-print(f"R2: {test_metrics['test_r2']}")
-print(f"RMSE: {test_metrics['test_rmse']}")
-print(f"MAPE: {test_metrics['test_mape']}\n")
+print("="*60)
+print("EVALUACIÓN EN CONJUNTO DE PRUEBA")
+print("="*60)
+print("Sin Regularización:")
+print(f"  Test R²:    {test_metrics_nr['test_r2']:.4f}")
+print(f"  Test RMSE:  ${test_metrics_nr['test_rmse']:,.2f}")
+print(f"  Test MAPE:  {test_metrics_nr['test_mape']:.2f}%")
+print()
+print("Con Regularización:")
+print(f"  Test R²:    {test_metrics['test_r2']:.4f}")
+print(f"  Test RMSE:  ${test_metrics['test_rmse']:,.2f}")
+print(f"  Test MAPE:  {test_metrics['test_mape']:.2f}%")
+print()
 
 # =======================
-# 9. Visualizaciones y guardado
+# 9. COMPARACIÓN DE MODELOS
 # =======================
-plt.figure(figsize=(10,6))
-plt.bar(['Train R2', 'Val R2'], [metrics_nr['train_r2'], metrics_nr['val_r2']], color=['blue','orange'])
-plt.title('Bias/Variance sin regularización (R2)')
-plt.savefig("bias_variance_no_reg.png")
-plt.close()
+print("="*60)
+print("COMPARACIÓN DE MODELOS")
+print("="*60)
 
-plt.figure(figsize=(10,6))
-plt.bar(['Train R2', 'Val R2'], [metrics_r['train_r2'], metrics_r['val_r2']], color=['blue','orange'])
-plt.title(f'Bias/Variance con regularización (alpha={best_alpha})')
-plt.savefig("bias_variance_reg.png")
-plt.close()
+# Tabla comparativa Training
+print("\nConjunto de ENTRENAMIENTO:")
+print("-"*50)
+print(f"{'Modelo':<20} {'R²':>10} {'RMSE':>15} {'MAPE':>10}")
+print("-"*50)
+print(f"{'Sin Regularización':<20} {metrics_nr['train_r2']:>10.4f} ${metrics_nr['train_rmse']:>14,.0f} {metrics_nr['train_mape']:>9.2f}%")
+print(f"{'Con Regularización':<20} {metrics_r['train_r2']:>10.4f} ${metrics_r['train_rmse']:>14,.0f} {metrics_r['train_mape']:>9.2f}%")
+print("-"*50)
+cambio_r2_train = metrics_r['train_r2'] - metrics_nr['train_r2']
+cambio_rmse_train = metrics_r['train_rmse'] - metrics_nr['train_rmse']
+cambio_mape_train = metrics_r['train_mape'] - metrics_nr['train_mape']
+print(f"{'Cambio':<20} {cambio_r2_train:>+10.4f} ${cambio_rmse_train:>+14,.0f} {cambio_mape_train:>+9.2f}%")
 
-plt.figure(figsize=(10,6))
-plt.scatter(y_test, y_test_pred, color='blue', alpha=0.6)
-plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
-plt.xlabel('Actual Price')
-plt.ylabel('Predicted Price')
-plt.title('Predictions vs Actual (Test)')
-plt.savefig("pred_vs_actual.png")
-plt.close()
+# Tabla comparativa Validation
+print("\nConjunto de VALIDACIÓN:")
+print("-"*50)
+print(f"{'Modelo':<20} {'R²':>10} {'RMSE':>15} {'MAPE':>10}")
+print("-"*50)
+print(f"{'Sin Regularización':<20} {metrics_nr['val_r2']:>10.4f} ${metrics_nr['val_rmse']:>14,.0f} {metrics_nr['val_mape']:>9.2f}%")
+print(f"{'Con Regularización':<20} {metrics_r['val_r2']:>10.4f} ${metrics_r['val_rmse']:>14,.0f} {metrics_r['val_mape']:>9.2f}%")
+print("-"*50)
+cambio_r2_val = metrics_r['val_r2'] - metrics_nr['val_r2']
+cambio_rmse_val = metrics_r['val_rmse'] - metrics_nr['val_rmse']
+cambio_mape_val = metrics_r['val_mape'] - metrics_nr['val_mape']
+print(f"{'Cambio':<20} {cambio_r2_val:>+10.4f} ${cambio_rmse_val:>+14,.0f} {cambio_mape_val:>+9.2f}%")
 
-residuals = y_test_pred - y_test
-plt.figure(figsize=(10,6))
-plt.hist(residuals, bins=25, color='green', alpha=0.7)
-plt.axvline(0, color='red', linestyle='--')
-plt.title('Residuals Distribution (Test)')
-plt.savefig("residuals.png")
-plt.close()
+# Tabla comparativa Test
+print("\nConjunto de PRUEBA:")
+print("-"*50)
+print(f"{'Modelo':<20} {'R²':>10} {'RMSE':>15} {'MAPE':>10}")
+print("-"*50)
+print(f"{'Sin Regularización':<20} {test_metrics_nr['test_r2']:>10.4f} ${test_metrics_nr['test_rmse']:>14,.0f} {test_metrics_nr['test_mape']:>9.2f}%")
+print(f"{'Con Regularización':<20} {test_metrics['test_r2']:>10.4f} ${test_metrics['test_rmse']:>14,.0f} {test_metrics['test_mape']:>9.2f}%")
+print("-"*50)
+cambio_r2_test = test_metrics['test_r2'] - test_metrics_nr['test_r2']
+cambio_rmse_test = test_metrics['test_rmse'] - test_metrics_nr['test_rmse']
+cambio_mape_test = test_metrics['test_mape'] - test_metrics_nr['test_mape']
+print(f"{'Cambio':<20} {cambio_r2_test:>+10.4f} ${cambio_rmse_test:>+14,.0f} {cambio_mape_test:>+9.2f}%")
 
-percentage_errors = np.abs((y_test_pred - y_test) / y_test) * 100
-plt.figure(figsize=(10,6))
-plt.hist(percentage_errors, bins=25, color='orange', alpha=0.7)
-plt.axvline(np.mean(percentage_errors), color='red', linestyle='--', label=f'Mean: {np.mean(percentage_errors):.1f}%')
-plt.legend()
-plt.title('Absolute Percentage Error (Test)')
-plt.savefig("percentage_error.png")
-plt.close()
+# =======================
+# 10. Visualizaciones y guardado
+# =======================
+# plt.figure(figsize=(10,6))
+# plt.bar(['Train R2', 'Val R2'], [metrics_nr['train_r2'], metrics_nr['val_r2']], color=['blue','orange'])
+# plt.title('Bias/Variance sin regularización (R2)')
+# plt.savefig("bias_variance_no_reg.png")
+# plt.close()
 
-# Feature importance
-X_std = scaler_reg.scale_
-feature_impacts = [(f, coef / X_std[i]) for i, (f, coef) in enumerate(zip(available_features, model_reg.coef_))]
-feature_impacts.sort(key=lambda x: abs(x[1]), reverse=True)
-top_features = feature_impacts[:8]
-plt.figure(figsize=(10,6))
-plt.barh([f[0] for f in top_features], [abs(f[1]) for f in top_features], color='skyblue')
-plt.title('Top 8 Feature Importance')
-plt.savefig("feature_importance.png")
-plt.close()
+# plt.figure(figsize=(10,6))
+# plt.bar(['Train R2', 'Val R2'], [metrics_r['train_r2'], metrics_r['val_r2']], color=['blue','orange'])
+# plt.title(f'Bias/Variance con regularización (alpha={best_alpha})')
+# plt.savefig("bias_variance_reg.png")
+# plt.close()
 
-# Cross-validation plot
-alpha_vals = list(cv_results.keys())
-mean_r2s = [cv_results[a]['mean_r2'] for a in alpha_vals]
-std_r2s = [cv_results[a]['std_r2'] for a in alpha_vals]
-plt.figure(figsize=(10,6))
-plt.errorbar(alpha_vals, mean_r2s, yerr=std_r2s, marker='o', capsize=5)
-plt.axvline(best_alpha, color='red', linestyle='--')
-plt.xscale('log')
-plt.title('Cross-Validation R2 vs Alpha')
-plt.savefig("cv_r2_alpha.png")
-plt.close()
+# plt.figure(figsize=(10,6))
+# plt.scatter(y_test, y_test_pred, color='blue', alpha=0.6)
+# plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
+# plt.xlabel('Actual Price')
+# plt.ylabel('Predicted Price')
+# plt.title('Predictions vs Actual (Test)')
+# plt.savefig("pred_vs_actual.png")
+# plt.close()
 
-print("Graficas guardadas.")
+# residuals = y_test_pred - y_test
+# plt.figure(figsize=(10,6))
+# plt.hist(residuals, bins=25, color='green', alpha=0.7)
+# plt.axvline(0, color='red', linestyle='--')
+# plt.title('Residuals Distribution (Test)')
+# plt.savefig("residuals.png")
+# plt.close()
+
+# percentage_errors = np.abs((y_test_pred - y_test) / y_test) * 100
+# plt.figure(figsize=(10,6))
+# plt.hist(percentage_errors, bins=25, color='orange', alpha=0.7)
+# plt.axvline(np.mean(percentage_errors), color='red', linestyle='--', label=f'Mean: {np.mean(percentage_errors):.1f}%')
+# plt.legend()
+# plt.title('Absolute Percentage Error (Test)')
+# plt.savefig("percentage_error.png")
+# plt.close()
+
+# # Feature importance
+# X_std = scaler_reg.scale_
+# feature_impacts = [(f, coef / X_std[i]) for i, (f, coef) in enumerate(zip(available_features, model_reg.coef_))]
+# feature_impacts.sort(key=lambda x: abs(x[1]), reverse=True)
+# top_features = feature_impacts[:8]
+# plt.figure(figsize=(10,6))
+# plt.barh([f[0] for f in top_features], [abs(f[1]) for f in top_features], color='skyblue')
+# plt.title('Top 8 Feature Importance')
+# plt.savefig("feature_importance.png")
+# plt.close()
+
+# # Cross-validation plot
+# alpha_vals = list(cv_results.keys())
+# mean_r2s = [cv_results[a]['mean_r2'] for a in alpha_vals]
+# std_r2s = [cv_results[a]['std_r2'] for a in alpha_vals]
+# plt.figure(figsize=(10,6))
+# plt.errorbar(alpha_vals, mean_r2s, yerr=std_r2s, marker='o', capsize=5)
+# plt.axvline(best_alpha, color='red', linestyle='--')
+# plt.xscale('log')
+# plt.title('Cross-Validation R2 vs Alpha')
+# plt.savefig("cv_r2_alpha.png")
+# plt.close()
+
+# print("Graficas guardadas.")

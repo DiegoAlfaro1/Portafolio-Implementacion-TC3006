@@ -259,6 +259,41 @@ Las características más importantes para la predicción son:
 
 \subsection{Análisis Comparativo}
 
+% Tabla de métricas en Training
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|l|c|c|c|}
+    \hline
+    \textbf{Modelo} & \textbf{Train R²} & \textbf{Train RMSE} & \textbf{Train MAPE} \\
+    \hline
+    Sin Regularización & 0.690 & 1,012,872 & 15.93\% \\
+    Con Regularización & 0.690 & 1,011,798 & 15.87\% \\
+    \hline
+    \textbf{Cambio} & +0.001 & -1,074 & -0.06\% \\
+    \hline
+    \end{tabular}
+    \caption{Comparación de rendimiento en conjunto de entrenamiento}
+    \label{tab:train_comparison}
+\end{table}
+
+% Tabla de métricas en Validation
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|l|c|c|c|}
+    \hline
+    \textbf{Modelo} & \textbf{Val R²} & \textbf{Val RMSE} & \textbf{Val MAPE} \\
+    \hline
+    Sin Regularización & 0.615 & 1,169,666 & 18.63\% \\
+    Con Regularización & 0.615 & 1,169,729 & 18.58\% \\
+    \hline
+    \textbf{Cambio} & -0.000 & +64 & -0.04\% \\
+    \hline
+    \end{tabular}
+    \caption{Comparación de rendimiento en conjunto de validación}
+    \label{tab:val_comparison}
+\end{table}
+
+% Tabla de métricas en Test (la que ya tenías)
 \begin{table}[H]
     \centering
     \begin{tabular}{|l|c|c|c|}
@@ -271,8 +306,8 @@ Las características más importantes para la predicción son:
     \textbf{Cambio} & +0.002 & -3,434 & -0.20\% \\
     \hline
     \end{tabular}
-    \caption{Comparación de rendimiento entre modelos}
-    \label{tab:model_comparison}
+    \caption{Comparación de rendimiento en conjunto de prueba}
+    \label{tab:test_comparison}
 \end{table}
 
 \subsection{Impacto de la Regularización}
@@ -322,6 +357,10 @@ Posibles mejoras incluyen:
     \bibitem{devore2016probabilidad}
     Devore, J. L. (2016). \textit{Probabilidad y Estadística para Ingeniería y Ciencias} (9.ª ed.). Cengage Learning.
 
+    \bibitem{scikit-learn:Ridge}
+    Ridge. (s. f.). \textit{Scikit-learn}. Recuperado de 
+    \url{https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.Ridge.html}
+    
 
 \end{thebibliography}
 
